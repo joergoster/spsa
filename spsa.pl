@@ -69,10 +69,11 @@ my $VAR_NAME      = 0; # Name
 my $VAR_START     = 1; # Start Value (theta_0)
 my $VAR_MIN       = 2; # Minimum allowed value
 my $VAR_MAX       = 3; # Maximum allowed value
-my $VAR_C_END     = 4; # c in the last iteration
-my $VAR_R_END     = 5; # R in the last iteration. R = a / c ^ 2.
-my $VAR_SIMUL_ELO = 6; # Simulation: Elo loss from 0 (optimum) to +-100)
-my $VAR_END       = 7; # Nothing
+my $VAR_C_START   = 4; # c in the first iteration
+my $VAR_C_END     = 5; # c in the last iteration
+my $VAR_R_END     = 6; # R in the last iteration. R = a / c ^ 2.
+my $VAR_SIMUL_ELO = 7; # Simulation: Elo loss from 0 (optimum) to +-100)
+my $VAR_END       = 8; # Nothing
 
 # Extra calculated COLUMNS (SPSA paramters)
 my $VAR_C         = 7; # c
@@ -132,6 +133,7 @@ sub read_csv
         die "Invalid current: '$row->[$VAR_START]'"           if ($row->[$VAR_START]     !~ /^[-+]?[0-9]*\.?[0-9]+$/);
         die "Invalid max: '$row->[$VAR_MAX]'"                 if ($row->[$VAR_MAX]       !~ /^[-+]?[0-9]*\.?[0-9]+$/);
         die "Invalid min: '$row->[$VAR_MIN]'"                 if ($row->[$VAR_MIN]       !~ /^[-+]?[0-9]*\.?[0-9]+$/);
+        die "Invalid c start: '$row->[$VAR_C_START]'"         if ($row->[$VAR_C_START]   !~ /^[-+]?[0-9]*\.?[0-9]+$/);
         die "Invalid c end: '$row->[$VAR_C_END]'"             if ($row->[$VAR_C_END]     !~ /^[-+]?[0-9]*\.?[0-9]+$/);
         die "Invalid r end: '$row->[$VAR_R_END]'"             if ($row->[$VAR_R_END]     !~ /^[-+]?[0-9]*\.?[0-9]+$/);
         die "Invalid simul ELO: '$row->[$VAR_SIMUL_ELO]'"     if ($row->[$VAR_SIMUL_ELO] !~ /^[-+]?[0-9]*\.?[0-9]+$/);
@@ -140,7 +142,7 @@ sub read_csv
     # STEP. Calculate SPSA parameters for each variable.
     foreach $row (@variables)
     {
-        $row->[$VAR_C]       = $row->[$VAR_C_END] * $iterations ** $gamma; 
+        $row->[$VAR_C]       = $row->[$VAR_C_START] - $row->[$VAR_C_END]; 
         $row->[$VAR_A_END]   = $row->[$VAR_R_END] * $row->[$VAR_C_END] ** 2;
         $row->[$VAR_A]       = $row->[$VAR_A_END] * ($A + $iterations) ** $alpha;
     }
@@ -235,7 +237,7 @@ sub run_spsa
                  $var_min{$name}    = $row->[$VAR_MIN];
                  $var_max{$name}    = $row->[$VAR_MAX];
                  $var_a{$name}      = $row->[$VAR_A] / ($A + $iter) ** $alpha;
-                 $var_c{$name}      = $row->[$VAR_C] / $iter ** $gamma;
+                 $var_c{$name}      = $row->[$VAR_C_START] - $row->[$VAR_C] * $iter / $iterations;
                  $var_R{$name}      = $var_a{$name} / $var_c{$name} ** 2;
                  $var_delta{$name}  = int(rand(2)) ? 1 : -1;
 
