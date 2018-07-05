@@ -54,8 +54,6 @@ my $alpha          = $Config->{Main}->{Alpha}     ; defined($alpha)          || 
 my $eng1_path        = $Config->{Engine}->{Engine1}        ; defined($eng1_path)        || $simulate || die "Engine1 not defined!";
 my $eng2_path        = $Config->{Engine}->{Engine2}        ; defined($eng2_path)        || $simulate || die "Engine2 not defined!";
 my $epd_path         = $Config->{Engine}->{EPDBook}        ; defined($epd_path)         || $simulate || die "EPDBook not defined!";
-my $base_time        = $Config->{Engine}->{BaseTime}       ; defined($base_time)        || $simulate || die "BaseTime not defined!";
-my $inc_time         = $Config->{Engine}->{IncTime}        ; defined($inc_time)         || $simulate || die "IncTime not defined!";
 my $threads          = $Config->{Engine}->{Concurrency}    ; defined($threads)          || $simulate || die "Concurrency not defined!";
 my $draw_score_limit = $Config->{Engine}->{DrawScoreLimit} ; defined($draw_score_limit) || $simulate || die "DrawScoreLimit not defined!";
 my $draw_move_limit  = $Config->{Engine}->{DrawMoveLimit}  ; defined($draw_move_limit)  || $simulate || die "DrawMoveLimit not defined!";
@@ -211,7 +209,7 @@ sub run_spsa
     while(1)
     {
         # SPSA coefficients indexed by variable.
-        my (%var_value, %var_min, %var_max, %var_a, %var_c, %var_R, %var_delta, %var_eng1, %var_eng2);
+        my (%var_value, %var_min, %var_max, %var_a, %var_c, %var_R, %var_delta, %var_eng0, %var_eng1, %var_eng2);
         my $iter; 
 
         {
@@ -239,16 +237,22 @@ sub run_spsa
                  $var_R{$name}      = $var_a{$name} / $var_c{$name} ** 2;
                  $var_delta{$name}  = int(rand(2)) ? 1 : -1;
 
+                 $var_eng0{$name} = 0; # base engine with zeroed values
                  $var_eng1{$name} = min(max($var_value{$name} + $var_c{$name} * $var_delta{$name}, $var_min{$name}), $var_max{$name});
                  $var_eng2{$name} = min(max($var_value{$name} - $var_c{$name} * $var_delta{$name}, $var_min{$name}), $var_max{$name});
 
-                 print "Iteration: $iter, variable: $name, value: $var_value{$name}, a: $var_a{$name}, c: $var_c{$name}, R: $var_R{$name}\n";
+                 if ($iter % 100 == 0)
+                     print "Iteration: $iter, variable: $name, value: $var_value{$name}, a: $var_a{$name}, c: $var_c{$name}, R: $var_R{$name}\n";
              }
         }
 
-        # STEP. Play two games (with alternating colors) and obtain the result (2, 1, 0, -1, -2) from eng1 perspective.
-        my $result = ($simulate ? simulate_2games(\%var_eng1, \%var_eng2) : engine_2games(\%var_eng1, \%var_eng2));
- 
+        # STEP. Play 2 * 2 games each (with alternating colors) and obtain the result (2, 1, 0, -1, -2) from eng1 perspective.
+        my $result  = 0;
+           $result += ($simulate ? simulate_2games(\%var_eng1, \%var_eng0) : engine_2games(\%var_eng1, \%var_eng0));
+           $result += ($simulate ? simulate_2games(\%var_eng1, \%var_eng0) : engine_2games(\%var_eng1, \%var_eng0));
+           $result -= ($simulate ? simulate_2games(\%var_eng2, \%var_eng0) : engine_2games(\%var_eng2, \%var_eng0));
+           $result -= ($simulate ? simulate_2games(\%var_eng2, \%var_eng0) : engine_2games(\%var_eng2, \%var_eng0));
+
         # STEP. Apply the result
         {
             lock($shared_lock);
@@ -398,10 +402,6 @@ sub engine_2games
         while(engine_readline(\*Eng1_Reader) ne "readyok") {}
         while(engine_readline(\*Eng2_Reader) ne "readyok") {}
 
-        # STEP. Init Thinking times
-        my $eng1_time = $base_time;
-        my $eng2_time = $base_time;
-
         # STEP. Check which engine should start?
         my $engine_to_move = ($eng1_is_white == 1 && $side_to_start eq 'w') || ($eng1_is_white == 0 && $side_to_start eq 'b') ? 1 : 2;
 
@@ -424,12 +424,10 @@ GAME:  while(1)
            # STEP. Send engine the current positionn
            print $Curr_Writer "position fen $fenline" . ($moves ne '' ? " moves $moves" : "") . "\n";
 
-           print GAMELOG "Engine " . ($engine_to_move == 1 ? '1' : '2') . " starts thinking. Time: " .
-                  sprintf("%d", $engine_to_move == 1 ? $eng1_time : $eng2_time) . " Moves: $moves \n";
+           print GAMELOG "Engine " . ($engine_to_move == 1 ? '1' : '2') . " starts thinking." . " Moves: $moves \n";
 
            # STEP. Let it go!
-           my $t0 = time;
-           print $Curr_Writer "go wtime $wtime btime $btime winc $inc_time binc $inc_time\n";
+           print $Curr_Writer "go depth 1\n";
 
            # STEP. Read output from engine until it prints the bestmove.
            my $score = 0;
@@ -468,11 +466,6 @@ READ:      while($line = engine_readline($Curr_Reader))
            }
 
            print GAMELOG "Score: $score\n" if defined($score);
-
-           # STEP. Update thinking times
-           my $elapsed = time - $t0;
-           $eng1_time = $eng1_time - ($engine_to_move == 1 ? $elapsed * 1000 - $inc_time : 0); 
-           $eng2_time = $eng2_time - ($engine_to_move == 2 ? $elapsed * 1000 - $inc_time : 0);
 
            # STEP. Check for mate and stalemate
            if ($flag_mate)
