@@ -241,16 +241,13 @@ sub run_spsa
                  $var_eng1{$name} = min(max($var_value{$name} + $var_c{$name} * $var_delta{$name}, $var_min{$name}), $var_max{$name});
                  $var_eng2{$name} = min(max($var_value{$name} - $var_c{$name} * $var_delta{$name}, $var_min{$name}), $var_max{$name});
 
-                 if ($iter % 100 == 0)
-                     print "Iteration: $iter, variable: $name, value: $var_value{$name}, a: $var_a{$name}, c: $var_c{$name}, R: $var_R{$name}\n";
+                 print "Iteration: $iter, variable: $name, value: $var_value{$name}, a: $var_a{$name}, c: $var_c{$name}, R: $var_R{$name}\n" if ($iter % 100 == 0);
              }
         }
 
         # STEP. Play 2 * 2 games each (with alternating colors) and obtain the result (2, 1, 0, -1, -2) from eng1 perspective.
         my $result  = 0;
            $result += ($simulate ? simulate_2games(\%var_eng1, \%var_eng0) : engine_2games(\%var_eng1, \%var_eng0));
-           $result += ($simulate ? simulate_2games(\%var_eng1, \%var_eng0) : engine_2games(\%var_eng1, \%var_eng0));
-           $result -= ($simulate ? simulate_2games(\%var_eng2, \%var_eng0) : engine_2games(\%var_eng2, \%var_eng0));
            $result -= ($simulate ? simulate_2games(\%var_eng2, \%var_eng0) : engine_2games(\%var_eng2, \%var_eng0));
 
         # STEP. Apply the result
@@ -269,7 +266,7 @@ sub run_spsa
                 $logLine .= ",$shared_theta{$name}";
             }
 
-            print LOG "$logLine\n"
+            print LOG "$logLine\n" if ($iter % 100 == 0)
         }
     }
 
@@ -415,9 +412,6 @@ sub engine_2games
 
 GAME:  while(1)
        {
-           my $wtime = nearest_floor(1, $eng1_is_white == 1 ? $eng1_time : $eng2_time);
-           my $btime = nearest_floor(1, $eng1_is_white == 0 ? $eng1_time : $eng2_time);
-
            my $Curr_Writer = ($engine_to_move == 1 ? \*Eng1_Writer : \*Eng2_Writer);
            my $Curr_Reader = ($engine_to_move == 1 ? \*Eng1_Reader : \*Eng2_Reader);
 
